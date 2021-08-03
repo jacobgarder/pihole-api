@@ -68,20 +68,22 @@ class PiHole(object):
     }
 
     # Takes in an ip address of a pihole server
-    def __init__(self, ip_address):
+    def __init__(self, ip_address, port=80):
         self.ip_address = ip_address
         self.auth_data = None
         self.refresh()
         self.pw = None
+        self.baseurl = "http://" + self.ip_address + ":" + str(self.port) + "/admin/api.php"
 
     def refresh(self):
-        rawdata = requests.get("http://" + self.ip_address + "/admin/api.php?summary").json()
+        rawdata = requests.get(self.baseurl).json()
 
         if self.auth_data:
-            topdevicedata = requests.get("http://" + self.ip_address + "/admin/api.php?getQuerySources=25&auth=" + self.auth_data.token).json()
+            topdevicedata = requests.get(self.baseurl+"?getQuerySources=25&auth=" + self.auth_data.token).json()
             self.top_devices = topdevicedata["top_sources"]
-            self.forward_destinations = requests.get("http://" + self.ip_address + "/admin/api.php?getForwardDestinations&auth=" + self.auth_data.token).json()
-            self.query_types = requests.get("http://" + self.ip_address + "/admin/api.php?getQueryTypes&auth=" + self.auth_data.token).json()["querytypes"]
+            self.forward_destinations = requests.get(self.baseurl+"?getForwardDestinations&auth=" + self.auth_data.token).json()
+            self.query_types = requests.get(self.baseurl + "?getQueryTypes&auth=" +
+                                            self.auth_data.token).json()["querytypes"]
 
         # Data that is returned is now parsed into vars
         self.status = rawdata["status"]
@@ -99,12 +101,13 @@ class PiHole(object):
 
     @requires_auth
     def refreshTop(self, count):
-        rawdata = requests.get("http://" + self.ip_address + "/admin/api.php?topItems="+ str(count) +"&auth=" + self.auth_data.token).json()
+        rawdata = requests.get(self.baseurl + "?topItems=" + str(count) + "&auth=" +
+                               self.auth_data.token).json()
         self.top_queries = rawdata["top_queries"]
         self.top_ads = rawdata["top_ads"]
 
     def getGraphData(self):
-        rawdata = requests.get("http://" + self.ip_address + "/admin/api.php?overTimeData10mins").json()
+        rawdata = requests.get(self.baseurl + "?overTimeData10mins").json()
         return {"domains":rawdata["domains_over_time"], "ads":rawdata["ads_over_time"]}
 
     def authenticate(self, password):
@@ -128,7 +131,7 @@ class PiHole(object):
             print("Unable to get queries. Please authenticate")
             exit(1)
 
-        url = "http://" + self.ip_address + "/admin/api_db.php?getAllQueries&auth=" + self.auth_data.token
+        url = self.baseurl + "?getAllQueries&auth=" + self.auth_data.token
 
         if client and domain:
             print("Cannot search for both client AND domain")
@@ -154,10 +157,10 @@ class PiHole(object):
             until = date_to
 
         if start is not None:
-            url +="&from=" + str(start.timestamp())
+            url += "&from=" + str(start.timestamp())
 
         if until is not None:
-            url +="&until=" + str(until.timestamp())
+            url += "&until=" + str(until.timestamp())
 
         if client:
             url += "&client=" + client
@@ -184,34 +187,33 @@ class PiHole(object):
 
     @requires_auth
     def enable(self):
-        requests.get("http://" + self.ip_address + "/admin/api.php?enable&auth=" + self.auth_data.token)
+        requests.get(self.baseurl + "?enable&auth=" + self.auth_data.token)
 
     @requires_auth
     def disable(self, seconds):
-        requests.get("http://" + self.ip_address + "/admin/api.php?disable="+ str(seconds) +"&auth=" + self.auth_data.token)
+        requests.get(self.baseurl + "?disable=" + str(seconds) + "&auth=" + self.auth_data.token)
 
     def getVersion(self):
-        return requests.get("http://" + self.ip_address + "/admin/api.php?versions").json()
+        return requests.get(self.baseurl + "?versions").json()
 
     @requires_auth
     def getDBfilesize(self):
-        return float(requests.get("http://" + self.ip_address + "/admin/api_db.php?getDBfilesize&auth=" + self.auth_data.token).json()["filesize"])
+        return float(requests.get("http://" + self.ip_address + ":" + str(self.port) + "/admin/api_db.php?getDBfilesize&auth=" + self.auth_data.token).json()["filesize"])
 
     @requires_auth
     def getList(self, list):
-        return requests.get(
-            "http://" + str(self.ip_address) + "/admin/api.php?list=" + list + "&auth=" + self.auth_data.token).json()
+        return requests.get(self.baseurl + "?list=" + list + "&auth=" +
+                            self.auth_data.token).json()
 
     @requires_auth
     def add(self, list, domain, comment=""):
-        url = "/admin/api.php?list=" + list + "&add=" + domain + "&auth=" + self.auth_data.token
+        url = self.baseurl + "?list=" + list + "&add=" + domain + "&auth=" + self.auth_data.token
         comment = {'comment': comment}
-        response = requests.post(
-            "http://" + str(self.ip_address) + url, data=comment)
+        response = requests.post(url, data=comment)
         return response.text
 
     @requires_auth
     def sub(self, list, domain):
         with requests.session() as s:
-            s.get("http://"+ str(self.ip_address) +"/admin/scripts/pi-hole/php/sub.php")
-            requests.post("http://"+ str(self.ip_address) +"/admin/scripts/pi-hole/php/sub.php", data={"list":list, "domain":domain, "pw":self.pw}).text
+            s.get("http://"+ str(self.ip_address) + ":" + str(self.port) + "/admin/scripts/pi-hole/php/sub.php")
+            requests.post("http://"+ str(self.ip_address) + str(self.port) + "/admin/scripts/pi-hole/php/sub.php", data={"list":list, "domain":domain, "pw":self.pw}).text
